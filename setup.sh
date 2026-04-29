@@ -323,9 +323,7 @@ EOF
 ok "Analytics.astro"
 
 cat > src/styles/global.css << 'EOF'
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @layer base {
   html {
