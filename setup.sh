@@ -4,17 +4,15 @@
 # Mergewello Technologies - Project Scaffolding Script
 # ============================================================
 #
-# Interactive usage (recommended):
-#   curl -fsSL <YOUR_RAW_GIST_URL> -o setup.sh && bash setup.sh
+# Interactive usage:
+#   curl -fsSL <YOUR_RAW_URL> -o setup.sh && bash setup.sh
 #
-# Direct usage (skip prompts):
+# Direct usage:
 #   ./setup-mergewello.sh <project-name> [--sanity] [--repo <github-url>]
 #
 # ============================================================
 
 set -e
-
-# ── Make self executable (in case downloaded without +x) ─────
 
 if [[ ! -x "$0" ]]; then
   chmod +x "$0"
@@ -68,7 +66,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# ── Interactive mode (if no project name passed) ─────────────
+# ── Interactive mode ─────────────────────────────────────────
 
 if [[ -z "$PROJECT_NAME" ]]; then
   INTERACTIVE=true
@@ -80,7 +78,6 @@ if [[ -z "$PROJECT_NAME" ]]; then
   echo -e "${WHITE}=============================================${NC}"
   echo ""
 
-  # Project name
   while true; do
     read -rp "$(echo -e "${BOLD}Project name:${NC} ")" RAW_NAME
 
@@ -89,7 +86,6 @@ if [[ -z "$PROJECT_NAME" ]]; then
       continue
     fi
 
-    # Sanitize: lowercase, replace spaces with hyphens, remove special chars
     PROJECT_NAME=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g')
     echo -e "${DIM}  Folder name: ${PROJECT_NAME}${NC}"
 
@@ -104,7 +100,6 @@ if [[ -z "$PROJECT_NAME" ]]; then
 
   echo ""
 
-  # Include Sanity?
   read -rp "$(echo -e "${BOLD}Include Sanity CMS? [y/N]:${NC} ")" SANITY_ANSWER
   case "$SANITY_ANSWER" in
     [yY]|[yY][eE][sS])
@@ -119,7 +114,6 @@ if [[ -z "$PROJECT_NAME" ]]; then
 
   echo ""
 
-  # GitHub repo?
   read -rp "$(echo -e "${BOLD}GitHub repo URL ${DIM}(leave blank to skip)${NC}${BOLD}:${NC} ")" GITHUB_REPO
   if [[ -n "$GITHUB_REPO" ]]; then
     echo -e "${DIM}  Will push to: ${GITHUB_REPO}${NC}"
@@ -129,7 +123,6 @@ if [[ -z "$PROJECT_NAME" ]]; then
 
   echo ""
 
-  # Confirm
   STACK="Astro + Tailwind"
   if [[ "$INCLUDE_SANITY" == true ]]; then
     STACK="Astro + Tailwind + Sanity"
@@ -153,8 +146,6 @@ if [[ -z "$PROJECT_NAME" ]]; then
   esac
 fi
 
-# ── Banner (non-interactive mode) ────────────────────────────
-
 if [[ "$INTERACTIVE" == false ]]; then
   echo ""
   echo -e "${WHITE}=============================================${NC}"
@@ -177,11 +168,12 @@ NODE_MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
 if [[ "$NODE_MAJOR" -lt 18 ]]; then
   fail "Node.js 18+ required. You have v${NODE_VERSION}."
 fi
-ok "Node.js v${NODE_VERSION}"
 
 if [[ -d "$PROJECT_NAME" ]]; then
   fail "Folder '${PROJECT_NAME}' already exists. Delete it or use a different name."
 fi
+
+ok "Node.js v${NODE_VERSION}"
 ok "All checks passed"
 
 # ── Create Astro project ────────────────────────────────────
@@ -189,50 +181,40 @@ ok "All checks passed"
 step "Creating Astro project"
 npm create astro@latest "$PROJECT_NAME" -- --template minimal --install --yes
 
-if [[ ! -d "$PROJECT_NAME" ]]; then
-  fail "Astro project creation failed."
-fi
+[[ -d "$PROJECT_NAME" ]] || fail "Astro project creation failed."
 ok "Astro project created"
 
 cd "$PROJECT_NAME"
 
-# ── Git identity (local only) ───────────────────────────────
+# ── Git setup ───────────────────────────────────────────────
 
 step "Configuring Git"
 
 if [[ ! -d ".git" ]]; then
-  git init > /dev/null 2>&1
+  git init >/dev/null 2>&1
 fi
 
 git config user.name "Mergewello Technologies"
 git config user.email "contact@mergewello.com"
 ok "Local Git identity set"
 
-# ── Tailwind CSS ─────────────────────────────────────────────
+# ── Tailwind ────────────────────────────────────────────────
 
 step "Adding Tailwind CSS"
-npx astro add tailwind --yes
-
-if [[ $? -ne 0 ]]; then
-  fail "Tailwind installation failed."
-fi
+npx astro add tailwind --yes >/dev/null 2>&1 || fail "Tailwind installation failed."
 ok "Tailwind CSS integrated"
 
-# ── Sanity (optional) ───────────────────────────────────────
+# ── Sanity packages (optional) ──────────────────────────────
 
 if [[ "$INCLUDE_SANITY" == true ]]; then
-  step "Adding Sanity CMS integration"
-  npm install @sanity/client @sanity/image-url
-
-  if [[ $? -ne 0 ]]; then
-    fail "Sanity packages failed to install."
-  fi
+  step "Adding Sanity CMS packages"
+  npm install @sanity/client @sanity/image-url >/dev/null 2>&1 || fail "Sanity packages failed to install."
   ok "Sanity client packages installed"
 else
   skip "Sanity CMS"
 fi
 
-# ── Scaffold folder structure ────────────────────────────────
+# ── Folder structure ────────────────────────────────────────
 
 step "Scaffolding project structure"
 
@@ -240,9 +222,8 @@ FOLDERS=(
   "src/components/ui"
   "src/components/sections"
   "src/layouts"
-  "src/styles"
   "src/lib"
-  "src/content"
+  "src/styles"
   "src/assets/images"
   "public/fonts"
 )
@@ -250,43 +231,97 @@ FOLDERS=(
 for folder in "${FOLDERS[@]}"; do
   mkdir -p "$folder"
 done
+
 ok "Folder structure created"
 
-# ── Base layout ──────────────────────────────────────────────
+# ── Base files ──────────────────────────────────────────────
 
 step "Creating base files"
 
-cat > src/layouts/BaseLayout.astro << 'EOF'
+cat > src/lib/site.ts << 'EOF'
+export const siteConfig = {
+  name: "Mergewello Technologies",
+  siteUrl: "",
+  defaultTitle: "Fast & Modern Websites for Your Business",
+  description:
+    "Mergewello Technologies builds fast, modern websites for growing businesses.",
+  ogImage: "/og-image.jpg",
+};
+EOF
+ok "site.ts"
+
+cat > src/components/ui/Container.astro << 'EOF'
+<div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+  <slot />
+</div>
+EOF
+ok "Container.astro"
+
+cat > src/components/ui/Section.astro << 'EOF'
 ---
 interface Props {
-  title: string;
-  description?: string;
+  class?: string;
 }
-
-const {
-  title,
-  description = "Built by Mergewello Technologies"
-} = Astro.props;
+const { class: className = "" } = Astro.props;
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content={description} />
-    <meta name="generator" content={Astro.generator} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>{title}</title>
-  </head>
-  <body class="min-h-screen bg-white text-gray-900 antialiased">
-    <slot />
-  </body>
-</html>
+<section class={`py-16 md:py-20 ${className}`}>
+  <slot />
+</section>
 EOF
-ok "BaseLayout.astro"
+ok "Section.astro"
 
-# Global CSS
+cat > src/components/ui/Button.astro << 'EOF'
+---
+interface Props {
+  href?: string;
+  variant?: "primary" | "secondary";
+  class?: string;
+}
+const {
+  href = "#",
+  variant = "primary",
+  class: className = "",
+} = Astro.props;
+
+const base =
+  "inline-flex items-center justify-center rounded-lg px-6 py-3 text-sm font-semibold transition";
+const styles =
+  variant === "primary"
+    ? "bg-black text-white hover:opacity-90"
+    : "bg-gray-100 text-gray-900 hover:bg-gray-200";
+---
+
+<a href={href} class={`${base} ${styles} ${className}`}>
+  <slot />
+</a>
+EOF
+ok "Button.astro"
+
+cat > src/components/ui/StructuredData.astro << 'EOF'
+---
+const websiteData = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Mergewello Technologies",
+  url: "https://example.com"
+};
+---
+
+<script type="application/ld+json" set:html={JSON.stringify(websiteData)} />
+EOF
+ok "StructuredData.astro"
+
+cat > src/components/ui/Analytics.astro << 'EOF'
+---
+/*
+  Placeholder for analytics scripts.
+  Add GA, Plausible, or other analytics here when needed.
+*/
+---
+EOF
+ok "Analytics.astro"
+
 cat > src/styles/global.css << 'EOF'
 @tailwind base;
 @tailwind components;
@@ -297,13 +332,83 @@ cat > src/styles/global.css << 'EOF'
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
   }
+
+  body {
+    @apply bg-white text-gray-900;
+  }
 }
 EOF
 ok "global.css"
 
-# Sanity client (if included)
+cat > src/layouts/BaseLayout.astro << 'EOF'
+---
+import "../styles/global.css";
+import StructuredData from "../components/ui/StructuredData.astro";
+import Analytics from "../components/ui/Analytics.astro";
+import { siteConfig } from "../lib/site";
+
+interface Props {
+  title?: string;
+  description?: string;
+  noindex?: boolean;
+}
+
+const {
+  title = siteConfig.defaultTitle,
+  description = siteConfig.description,
+  noindex = false,
+} = Astro.props;
+
+const siteUrl = siteConfig.siteUrl || "https://example.com";
+const canonicalUrl = `${siteUrl}${Astro.url.pathname}`;
+const pageTitle = `${title} | ${siteConfig.name}`;
+const ogImage = `${siteUrl}${siteConfig.ogImage}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="author" content={siteConfig.name} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    {noindex ? (
+      <meta name="robots" content="noindex, nofollow" />
+    ) : (
+      <meta name="robots" content="index, follow" />
+    )}
+
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteConfig.name} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <StructuredData />
+    <Analytics />
+  </head>
+  <body class="min-h-screen antialiased">
+    <slot />
+  </body>
+</html>
+EOF
+ok "BaseLayout.astro"
+
 if [[ "$INCLUDE_SANITY" == true ]]; then
-cat > src/lib/sanity.ts << 'EOF'
+  cat > src/lib/sanity.ts << 'EOF'
 import { createClient } from "@sanity/client";
 import imageUrlBuilder from "@sanity/image-url";
 
@@ -320,27 +425,23 @@ export function urlFor(source: any) {
   return builder.image(source);
 }
 EOF
-ok "sanity.ts client"
+  ok "sanity.ts"
 fi
 
-# .env template
 cat > .env.example << EOF
 # ============================================
 # Mergewello Project: ${PROJECT_NAME}
 # ============================================
 
-# Sanity CMS (fill in when connecting)
+PUBLIC_SITE_URL=
 PUBLIC_SANITY_PROJECT_ID=
 PUBLIC_SANITY_DATASET=production
-
-# Site
-PUBLIC_SITE_URL=
 EOF
 
 cp .env.example .env
-ok ".env files"
+ok ".env.example and .env"
 
-# ── Update .gitignore ────────────────────────────────────────
+# ── Improve .gitignore ──────────────────────────────────────
 
 step "Updating .gitignore"
 
@@ -352,69 +453,83 @@ cat >> .gitignore << 'EOF'
 .env.*.local
 .DS_Store
 Thumbs.db
+.vercel
+dist
 EOF
 ok ".gitignore updated"
 
-# ── Replace default index page ───────────────────────────────
+# ── Replace starter page ────────────────────────────────────
 
 cat > src/pages/index.astro << 'EOF'
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import Container from "../components/ui/Container.astro";
+import Section from "../components/ui/Section.astro";
+import Button from "../components/ui/Button.astro";
 ---
 
-<BaseLayout title="Welcome">
-  <main class="flex items-center justify-center min-h-screen">
-    <div class="text-center">
-      <h1 class="text-4xl font-bold mb-4">Project Ready</h1>
-      <p class="text-gray-600">Built with Astro + Tailwind by Mergewello Technologies</p>
-    </div>
-  </main>
+<BaseLayout title="Project Ready">
+  <Section class="min-h-screen flex items-center">
+    <Container>
+      <div class="mx-auto max-w-3xl text-center">
+        <p class="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500">
+          Mergewello Project Scaffold
+        </p>
+        <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
+          Your project is ready to build
+        </h1>
+        <p class="mt-6 text-lg text-gray-600">
+          Start building with Astro, Tailwind, and a reusable Mergewello structure.
+        </p>
+        <div class="mt-8 flex justify-center">
+          <Button href="#">Start Building</Button>
+        </div>
+      </div>
+    </Container>
+  </Section>
 </BaseLayout>
 EOF
-ok "index.astro replaced"
+ok "Starter homepage created"
 
-# ── Initial commit ───────────────────────────────────────────
+# ── Initial commit ──────────────────────────────────────────
 
 step "Creating initial commit"
 
-COMMIT_MSG="chore: project scaffold - Astro + Tailwind"
+COMMIT_MSG="chore: scaffold Astro + Tailwind"
 if [[ "$INCLUDE_SANITY" == true ]]; then
-  COMMIT_MSG="chore: project scaffold - Astro + Tailwind + Sanity"
+  COMMIT_MSG="chore: scaffold Astro + Tailwind + Sanity"
 fi
 
 git add .
-git commit -m "$COMMIT_MSG"
-
-if [[ $? -ne 0 ]]; then
-  fail "Commit failed. Check git config."
-fi
+git commit -m "$COMMIT_MSG" >/dev/null 2>&1 || fail "Commit failed. Check git config."
 ok "Initial commit created"
 
-# ── GitHub (optional) ────────────────────────────────────────
+# ── Optional GitHub push ────────────────────────────────────
 
 if [[ -n "$GITHUB_REPO" ]]; then
   step "Connecting to GitHub"
   git branch -M main
   git remote add origin "$GITHUB_REPO" 2>/dev/null || true
-  git push -u origin main
 
-  if [[ $? -ne 0 ]]; then
+  if git push -u origin main; then
+    ok "Pushed to ${GITHUB_REPO}"
+  else
     warn "Push failed. Check repo access or authentication."
     echo -e "   ${YELLOW}You can push manually later:${NC}"
     echo -e "   ${WHITE}  git remote add origin ${GITHUB_REPO}${NC}"
     echo -e "   ${WHITE}  git push -u origin main${NC}"
-  else
-    ok "Pushed to ${GITHUB_REPO}"
   fi
 else
   skip "GitHub connection"
 fi
 
-# ── Summary ──────────────────────────────────────────────────
+# ── Summary ─────────────────────────────────────────────────
 
 STACK="Astro + Tailwind"
+MODE="Starter (static)"
 if [[ "$INCLUDE_SANITY" == true ]]; then
   STACK="Astro + Tailwind + Sanity"
+  MODE="Growth / Full (CMS-ready)"
 fi
 
 echo ""
@@ -424,18 +539,20 @@ echo -e "${GREEN}=============================================${NC}"
 echo ""
 echo -e "  ${WHITE}Project:   ${PROJECT_NAME}${NC}"
 echo -e "  ${WHITE}Stack:     ${STACK}${NC}"
+echo -e "  ${WHITE}Mode:      ${MODE}${NC}"
 echo -e "  ${WHITE}Location:  $(pwd)${NC}"
 echo ""
 echo -e "  ${CYAN}Next steps:${NC}"
-echo -e "  ${WHITE}  npm run dev              Start dev server${NC}"
+echo -e "  ${WHITE}  npm run dev${NC}              Start dev server"
+echo -e "  ${WHITE}  edit src/lib/site.ts${NC}     Set site metadata"
 
 if [[ "$INCLUDE_SANITY" == true ]]; then
-  echo -e "  ${WHITE}  nano .env                Add Sanity project ID${NC}"
+  echo -e "  ${WHITE}  edit .env${NC}                Add Sanity project ID"
 fi
 
 if [[ -z "$GITHUB_REPO" ]]; then
-  echo -e "  ${WHITE}  git remote add origin <url>    Connect to GitHub${NC}"
-  echo -e "  ${WHITE}  git push -u origin main        Push your code${NC}"
+  echo -e "  ${WHITE}  git remote add origin <url>${NC}"
+  echo -e "  ${WHITE}  git push -u origin main${NC}"
 fi
 
 echo ""
